@@ -8,6 +8,7 @@ TWEAK_NAME = QuickTranslate
 
 QuickTranslate_FILES = Tweak.x
 QuickTranslate_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
+QuickTranslate_LDFLAGS = -fuse-ld=lld
 QuickTranslate_FRAMEWORKS = UIKit Foundation
 QuickTranslate_EXTRA_FRAMEWORKS = CydiaSubstrate
 QuickTranslate_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
