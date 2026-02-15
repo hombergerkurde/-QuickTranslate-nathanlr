@@ -6,6 +6,19 @@
 static BOOL tweakEnabled = YES;
 static NSString *targetLanguage = @"de";
 
+// Helper um keyWindow zu bekommen (iOS 13+ kompatibel)
+static UIWindow* getKeyWindow() {
+    UIWindow *foundWindow = nil;
+    NSArray *windows = [[UIApplication sharedApplication] windows];
+    for (UIWindow *window in windows) {
+        if (window.isKeyWindow) {
+            foundWindow = window;
+            break;
+        }
+    }
+    return foundWindow;
+}
+
 // Google Translate Helper
 @interface TranslateHelper : NSObject
 + (void)translateText:(NSString *)text toLanguage:(NSString *)lang completion:(void(^)(NSString *result, NSError *error))completion;
@@ -64,6 +77,15 @@ static NSString *targetLanguage = @"de";
 
 @end
 
+// UIResponder Category für neue Methoden
+@interface UIResponder (QuickTranslate)
+- (void)quickTranslate:(id)sender;
+- (void)showLoadingOverlayQT;
+- (void)showOverlayQT:(NSString *)title message:(NSString *)message isError:(BOOL)isError original:(NSString *)original;
+- (void)copyTextQT:(UIButton *)sender;
+- (void)dismissOverlayQT:(id)sender;
+@end
+
 // UIMenuController Hook
 %hook UIMenuController
 
@@ -109,24 +131,24 @@ static NSString *targetLanguage = @"de";
     }
     
     if (!selectedText || selectedText.length == 0) {
-        [self showOverlay:@"⚠️ Kein Text markiert" message:@"Bitte markiere zuerst einen Text." isError:YES original:nil];
+        [self showOverlayQT:@"⚠️ Kein Text markiert" message:@"Bitte markiere zuerst einen Text." isError:YES original:nil];
         return;
     }
     
-    [self showLoadingOverlay];
+    [self showLoadingOverlayQT];
     
     [TranslateHelper translateText:selectedText toLanguage:targetLanguage completion:^(NSString *result, NSError *error) {
         if (error) {
-            [self showOverlay:@"❌ Fehler" message:error.localizedDescription isError:YES original:nil];
+            [self showOverlayQT:@"❌ Fehler" message:error.localizedDescription isError:YES original:nil];
         } else {
-            [self showOverlay:@"✅ Übersetzung" message:result isError:NO original:selectedText];
+            [self showOverlayQT:@"✅ Übersetzung" message:result isError:NO original:selectedText];
         }
     }];
 }
 
 %new
-- (void)showLoadingOverlay {
-    UIWindow *window = [UIApplication sharedApplication].keyWindow;
+- (void)showLoadingOverlayQT {
+    UIWindow *window = getKeyWindow();
     if (!window) return;
     
     [[window viewWithTag:99999] removeFromSuperview];
@@ -167,8 +189,8 @@ static NSString *targetLanguage = @"de";
 }
 
 %new
-- (void)showOverlay:(NSString *)title message:(NSString *)message isError:(BOOL)isError original:(NSString *)original {
-    UIWindow *window = [UIApplication sharedApplication].keyWindow;
+- (void)showOverlayQT:(NSString *)title message:(NSString *)message isError:(BOOL)isError original:(NSString *)original {
+    UIWindow *window = getKeyWindow();
     if (!window) return;
     
     [[window viewWithTag:99999] removeFromSuperview];
@@ -178,7 +200,7 @@ static NSString *targetLanguage = @"de";
     backdrop.tag = 99999;
     backdrop.alpha = 0;
     
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissOverlay:)];
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissOverlayQT:)];
     [backdrop addGestureRecognizer:tap];
     
     CGFloat height = isError ? 200 : 380;
@@ -258,7 +280,7 @@ static NSString *targetLanguage = @"de";
         copyBtn.backgroundColor = [UIColor systemBlueColor];
         [copyBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         copyBtn.layer.cornerRadius = 12;
-        [copyBtn addTarget:self action:@selector(copyText:) forControlEvents:UIControlEventTouchUpInside];
+        [copyBtn addTarget:self action:@selector(copyTextQT:) forControlEvents:UIControlEventTouchUpInside];
         [overlay addSubview:copyBtn];
         
         UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -268,7 +290,7 @@ static NSString *targetLanguage = @"de";
         closeBtn.backgroundColor = [UIColor secondarySystemBackgroundColor];
         [closeBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
         closeBtn.layer.cornerRadius = 12;
-        [closeBtn addTarget:self action:@selector(dismissOverlay:) forControlEvents:UIControlEventTouchUpInside];
+        [closeBtn addTarget:self action:@selector(dismissOverlayQT:) forControlEvents:UIControlEventTouchUpInside];
         [overlay addSubview:closeBtn];
     } else {
         UIButton *okBtn = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -278,7 +300,7 @@ static NSString *targetLanguage = @"de";
         okBtn.backgroundColor = [UIColor systemRedColor];
         [okBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         okBtn.layer.cornerRadius = 12;
-        [okBtn addTarget:self action:@selector(dismissOverlay:) forControlEvents:UIControlEventTouchUpInside];
+        [okBtn addTarget:self action:@selector(dismissOverlayQT:) forControlEvents:UIControlEventTouchUpInside];
         [overlay addSubview:okBtn];
     }
     
@@ -293,8 +315,9 @@ static NSString *targetLanguage = @"de";
 }
 
 %new
-- (void)copyText:(UIButton *)sender {
-    UIView *backdrop = [[UIApplication sharedApplication].keyWindow viewWithTag:99999];
+- (void)copyTextQT:(UIButton *)sender {
+    UIWindow *window = getKeyWindow();
+    UIView *backdrop = [window viewWithTag:99999];
     NSString *text = objc_getAssociatedObject(backdrop, "translatedText");
     
     if (text) {
@@ -303,14 +326,15 @@ static NSString *targetLanguage = @"de";
         sender.enabled = NO;
         
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self dismissOverlay:nil];
+            [self dismissOverlayQT:nil];
         });
     }
 }
 
 %new
-- (void)dismissOverlay:(id)sender {
-    UIView *backdrop = [[UIApplication sharedApplication].keyWindow viewWithTag:99999];
+- (void)dismissOverlayQT:(id)sender {
+    UIWindow *window = getKeyWindow();
+    UIView *backdrop = [window viewWithTag:99999];
     [UIView animateWithDuration:0.3 animations:^{
         backdrop.alpha = 0;
         for (UIView *subview in backdrop.subviews) {
@@ -353,3 +377,6 @@ static void loadPrefs() {
     loadPrefs();
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.hombergerkurde.quicktranslate/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
+
+
+
