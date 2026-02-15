@@ -377,6 +377,3 @@ static void loadPrefs() {
     loadPrefs();
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.hombergerkurde.quicktranslate/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
-
-
-

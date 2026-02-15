@@ -1,9 +1,9 @@
 Package: com.hombergerkurde.quicktranslate
 Name: QuickTranslate
-Version: 2.1.0
-Architecture: iphoneos-arm64
-Description: Systemweite Übersetzung - Text markieren und übersetzen in allen Apps
+Version: 2.2.0
+Architecture: iphoneos-arm
+Description: Systemweite Übersetzung - Text markieren und übersetzen
 Maintainer: hombergerkurde
 Author: hombergerkurde
 Section: Tweaks
-Depends: firmware (>= 15.0)
+Depends: mobilesubstrate, preferenceloader
