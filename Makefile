@@ -11,7 +11,8 @@ QuickTranslate_FILES = Tweak.x
 QuickTranslate_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 QuickTranslate_LDFLAGS = -fuse-ld=lld
 QuickTranslate_FRAMEWORKS = UIKit Foundation
-QuickTranslate_EXTRA_FRAMEWORKS = CydiaSubstrate
+QuickTranslate_LIBRARIES = substrate
 QuickTranslate_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 
 include $(THEOS_MAKE_PATH)/tweak.mk
+```
