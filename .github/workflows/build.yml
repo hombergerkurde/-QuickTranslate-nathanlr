@@ -1,0 +1,71 @@
+name: Build DEB
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Install Build Tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang llvm lld build-essential fakeroot git curl unzip
+    
+    - name: Setup Theos
+      run: |
+        git clone --recursive https://github.com/theos/theos.git $HOME/theos
+        
+    - name: Download SDK
+      run: |
+        mkdir -p $HOME/theos/sdks
+        cd $HOME/theos/sdks
+        curl -LO https://github.com/theos/sdks/archive/refs/heads/master.zip
+        unzip -q master.zip
+        mv sdks-master/* ./
+        rm -rf sdks-master master.zip
+        
+    - name: Create Fake Toolchain
+      run: |
+        mkdir -p $HOME/theos/toolchain/linux/iphone/bin
+        ln -s /usr/bin/clang $HOME/theos/toolchain/linux/iphone/bin/clang
+        ln -s /usr/bin/clang++ $HOME/theos/toolchain/linux/iphone/bin/clang++
+        ln -s /usr/bin/ld.lld $HOME/theos/toolchain/linux/iphone/bin/ld.lld
+        ln -s /usr/bin/strip $HOME/theos/toolchain/linux/iphone/bin/strip
+        curl -LO https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
+        chmod +x ldid_linux_x86_64
+        mv ldid_linux_x86_64 $HOME/theos/toolchain/linux/iphone/bin/ldid
+        if [ -f /usr/bin/llvm-lipo ]; then
+          ln -s /usr/bin/llvm-lipo $HOME/theos/toolchain/linux/iphone/bin/lipo
+        elif [ -f /usr/bin/llvm-lipo-18 ]; then
+          ln -s /usr/bin/llvm-lipo-18 $HOME/theos/toolchain/linux/iphone/bin/lipo
+        else
+          printf '#!/bin/bash\ncp $4 $6\n' > $HOME/theos/toolchain/linux/iphone/bin/lipo
+          chmod +x $HOME/theos/toolchain/linux/iphone/bin/lipo
+        fi
+        
+    - name: Build Package
+      run: |
+        export THEOS=$HOME/theos
+        make clean
+        make package FINALPACKAGE=1
+        
+    - name: Show DEB files
+      run: |
+        find . -name "*.deb" -ls
+        
+    - name: Copy DEB
+      run: |
+        cp packages/*.deb ./QuickTranslate.deb
+        
+    - name: Upload DEB
+      uses: actions/upload-artifact@v4
+      with:
+        name: QuickTranslate-nathanlr-v2.1
+        path: QuickTranslate.deb
