@@ -1,72 +1,71 @@
-# QuickTranslate v2.1 - für nathanlr rootless
+# QuickTranslate v2.4.0 - FINAL VERSION
 
-## 🎯 Optimiert für nathanlr rootless Jailbreak!
+## 🎯 Basiert auf Translomatic Struktur!
 
-Systemweite Übersetzung mit Google Translate - funktioniert in allen Apps!
-
----
-
-## ✨ Features:
-
-- ✅ Text markieren → "🌐 Übersetzen" → Fertig!
-- ✅ 16+ Sprachen verfügbar
-- ✅ Schönes Overlay mit Original + Übersetzung
-- ✅ Kopieren-Button
-- ✅ Funktioniert in **ALLEN Apps**
-- ✅ Speziell für **nathanlr rootless** angepasst
+Nach Analyse von Translomatic wurden folgende kritische Änderungen gemacht:
 
 ---
 
-## 📥 Installation:
+## ✅ WAS GEÄNDERT WURDE:
+
+### **1. Dependencies:**
+```
+VORHER: ellekit, preferenceloader
+JETZT: mobilesubstrate, preferenceloader
+```
+
+### **2. Makefile:**
+```makefile
+export ARCHS = arm64 arm64e  # Beide Architekturen!
+QuickTranslate_EXTRA_FRAMEWORKS = CydiaSubstrate  # Nicht Ellekit!
+```
+
+### **3. QuickTranslate.plist:**
+```xml
+<key>Bundles</key>
+<array>
+    <string>com.apple.UIKit</string>
+    <string>com.apple.Translation</string>  ← NEU!
+</array>
+```
+
+**WICHTIG:** Wird zu BINÄR Format konvertiert wie Translomatic!
+
+### **4. GitHub Actions:**
+- Konvertiert .plist zu binär Format
+- Baut Universal Binary (arm64 + arm64e)
+- Nutzt CydiaSubstrate Framework
+
+---
+
+## 📦 Installation:
 
 1. .deb von GitHub Actions herunterladen
-2. Auf iPhone kopieren (AirDrop, iCloud, etc.)
-3. Mit Filza oder Terminal installieren:
+2. Auf iPhone kopieren
+3. Installieren:
    ```bash
-   dpkg -i com.hombergerkurde.quicktranslate_2.1.0_iphoneos-arm64.deb
+   dpkg -i QuickTranslate-v2.4.0.deb
    killall -9 SpringBoard
    ```
 
 ---
 
-## ⚙️ Einstellungen:
+## 🎯 Kompatibilität:
 
-**Einstellungen → QuickTranslate**
-
-- Tweak aktivieren/deaktivieren
-- Zielsprache wählen aus 16 Sprachen:
-  - Deutsch, Englisch, Französisch, Spanisch, Italienisch
-  - Portugiesisch, Niederländisch, Türkisch, Arabisch, Russisch
-  - Chinesisch, Japanisch, Koreanisch, Hindi, Polnisch, Schwedisch
+- **nathanlr rootless** ✅
+- **iOS 15.0 - 18.x** ✅
+- **arm64 + arm64e** ✅
+- **CydiaSubstrate** ✅
 
 ---
 
-## 🎮 Verwendung:
+## 🚀 Features:
 
-1. Öffne eine beliebige App (Safari, WhatsApp, Twitter, etc.)
-2. Markiere Text (langes Drücken)
-3. Tippe auf "🌐 Übersetzen"
-4. Übersetzung erscheint im Overlay
-5. Optional: "Kopieren" Button nutzen
-
----
-
-## 🔧 Kompatibilität:
-
-- **iOS:** 15.0 - 18.x
-- **Jailbreak:** nathanlr rootless
-- **Architektur:** ARM64
+- Text in allen Apps markieren und übersetzen
+- 16 Sprachen verfügbar
+- Schönes Overlay mit Original + Übersetzung
+- Kopieren-Button
 
 ---
 
-## 📝 Version 2.1.0:
-
-- Optimiert für nathanlr rootless
-- Keine mobilesubstrate Abhängigkeit mehr
-- 16 Sprachen hinzugefügt
-- Verbesserte Fehlerbehandlung
-- Preferences-Fix für rootless
-
----
-
-**Made by hombergerkurde** 🚀
+**Made by hombergerkurde - Based on Translomatic structure**
