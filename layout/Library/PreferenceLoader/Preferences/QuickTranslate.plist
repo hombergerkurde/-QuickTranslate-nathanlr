@@ -48,17 +48,9 @@
 				<string>Französisch</string>
 				<string>Spanisch</string>
 				<string>Italienisch</string>
-				<string>Portugiesisch</string>
-				<string>Niederländisch</string>
 				<string>Türkisch</string>
 				<string>Arabisch</string>
 				<string>Russisch</string>
-				<string>Chinesisch</string>
-				<string>Japanisch</string>
-				<string>Koreanisch</string>
-				<string>Hindi</string>
-				<string>Polnisch</string>
-				<string>Schwedisch</string>
 			</array>
 			<key>validValues</key>
 			<array>
@@ -67,24 +59,10 @@
 				<string>fr</string>
 				<string>es</string>
 				<string>it</string>
-				<string>pt</string>
-				<string>nl</string>
 				<string>tr</string>
 				<string>ar</string>
 				<string>ru</string>
-				<string>zh</string>
-				<string>ja</string>
-				<string>ko</string>
-				<string>hi</string>
-				<string>pl</string>
-				<string>sv</string>
 			</array>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>footerText</key>
-			<string>QuickTranslate v2.1 für nathanlr rootless - Text markieren und übersetzen!</string>
 		</dict>
 	</array>
 	<key>title</key>
