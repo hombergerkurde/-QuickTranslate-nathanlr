@@ -3,10 +3,10 @@
 #import <objc/runtime.h>
 
 // Einstellungen
-static BOOL tweakEnabled = YES;
+static NSMutableDictionary *enabledApps = nil;
 static NSString *targetLanguage = @"de";
 
-// Helper um keyWindow zu bekommen (iOS 13+ kompatibel)
+// Helper für keyWindow
 static UIWindow* getKeyWindow() {
     UIWindow *foundWindow = nil;
     NSArray *windows = [[UIApplication sharedApplication] windows];
@@ -17,6 +17,13 @@ static UIWindow* getKeyWindow() {
         }
     }
     return foundWindow;
+}
+
+// Check ob App aktiviert ist
+static BOOL isAppEnabled() {
+    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+    if (!enabledApps || enabledApps.count == 0) return YES; // Falls keine Apps ausgewählt, überall aktiv
+    return [enabledApps[bundleID] boolValue];
 }
 
 // Google Translate Helper
@@ -77,264 +84,141 @@ static UIWindow* getKeyWindow() {
 
 @end
 
-// UIResponder Category für neue Methoden
-@interface UIResponder (QuickTranslate)
-- (void)quickTranslate:(id)sender;
-- (void)showLoadingOverlayQT;
-- (void)showOverlayQT:(NSString *)title message:(NSString *)message isError:(BOOL)isError original:(NSString *)original;
-- (void)copyTextQT:(UIButton *)sender;
-- (void)dismissOverlayQT:(id)sender;
+// Custom Translate Button
+@interface QTTranslateButton : UIButton
+@property (nonatomic, strong) NSString *selectedText;
 @end
 
-// UIMenuController Hook
-%hook UIMenuController
+@implementation QTTranslateButton
 
-- (void)setMenuItems:(NSArray *)items {
-    if (!tweakEnabled) {
-        %orig;
-        return;
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self = [super initWithFrame:frame]) {
+        [self setTitle:@"🌐 Übersetzen" forState:UIControlStateNormal];
+        [self setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        self.backgroundColor = [UIColor systemBlueColor];
+        self.titleLabel.font = [UIFont boldSystemFontOfSize:13];
+        self.layer.cornerRadius = 8;
+        self.layer.shadowColor = [UIColor blackColor].CGColor;
+        self.layer.shadowOpacity = 0.3;
+        self.layer.shadowOffset = CGSizeMake(0, 2);
+        self.layer.shadowRadius = 4;
+        [self addTarget:self action:@selector(translateTapped) forControlEvents:UIControlEventTouchUpInside];
     }
-    
-    NSMutableArray *newItems = items ? [items mutableCopy] : [NSMutableArray array];
-    
-    BOOL hasTranslate = NO;
-    for (UIMenuItem *item in newItems) {
-        if ([item.title isEqualToString:@"🌐 Übersetzen"]) {
-            hasTranslate = YES;
-            break;
-        }
-    }
-    
-    if (!hasTranslate) {
-        UIMenuItem *translateItem = [[UIMenuItem alloc] initWithTitle:@"🌐 Übersetzen" action:@selector(quickTranslate:)];
-        [newItems addObject:translateItem];
-    }
-    
-    %orig(newItems);
+    return self;
 }
 
-%end
-
-// UIResponder Hook
-%hook UIResponder
-
-%new
-- (void)quickTranslate:(id)sender {
-    NSString *selectedText = nil;
+- (void)translateTapped {
+    if (!self.selectedText || self.selectedText.length == 0) return;
     
-    if ([self conformsToProtocol:@protocol(UITextInput)]) {
-        id<UITextInput> textInput = (id<UITextInput>)self;
-        UITextRange *range = textInput.selectedTextRange;
-        if (range) {
-            selectedText = [textInput textInRange:range];
-        }
-    }
+    // Zeige Loading
+    [self setTitle:@"⏳" forState:UIControlStateNormal];
+    self.enabled = NO;
     
-    if (!selectedText || selectedText.length == 0) {
-        [self showOverlayQT:@"⚠️ Kein Text markiert" message:@"Bitte markiere zuerst einen Text." isError:YES original:nil];
-        return;
-    }
-    
-    [self showLoadingOverlayQT];
-    
-    [TranslateHelper translateText:selectedText toLanguage:targetLanguage completion:^(NSString *result, NSError *error) {
+    [TranslateHelper translateText:self.selectedText toLanguage:targetLanguage completion:^(NSString *result, NSError *error) {
+        self.enabled = YES;
+        [self setTitle:@"🌐 Übersetzen" forState:UIControlStateNormal];
+        
         if (error) {
-            [self showOverlayQT:@"❌ Fehler" message:error.localizedDescription isError:YES original:nil];
+            [self showPopup:@"❌ Fehler" message:error.localizedDescription];
         } else {
-            [self showOverlayQT:@"✅ Übersetzung" message:result isError:NO original:selectedText];
+            [self showPopup:@"✅ Übersetzung" message:result];
         }
     }];
 }
 
-%new
-- (void)showLoadingOverlayQT {
+- (void)showPopup:(NSString *)title message:(NSString *)message {
     UIWindow *window = getKeyWindow();
     if (!window) return;
     
-    [[window viewWithTag:99999] removeFromSuperview];
+    // Entferne altes Popup
+    [[window viewWithTag:88888] removeFromSuperview];
     
+    // Backdrop
     UIView *backdrop = [[UIView alloc] initWithFrame:window.bounds];
     backdrop.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
-    backdrop.tag = 99999;
+    backdrop.tag = 88888;
     backdrop.alpha = 0;
     
-    UIView *overlay = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 280, 180)];
-    overlay.center = backdrop.center;
-    overlay.backgroundColor = [UIColor systemBackgroundColor];
-    overlay.layer.cornerRadius = 20;
-    overlay.layer.shadowColor = [UIColor blackColor].CGColor;
-    overlay.layer.shadowOpacity = 0.3;
-    overlay.layer.shadowOffset = CGSizeMake(0, 4);
-    overlay.layer.shadowRadius = 10;
-    
-    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
-    spinner.center = CGPointMake(140, 70);
-    [spinner startAnimating];
-    [overlay addSubview:spinner];
-    
-    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(20, 110, 240, 50)];
-    label.text = @"Übersetze...\n🌐";
-    label.textAlignment = NSTextAlignmentCenter;
-    label.numberOfLines = 2;
-    label.font = [UIFont systemFontOfSize:18 weight:UIFontWeightMedium];
-    label.textColor = [UIColor secondaryLabelColor];
-    [overlay addSubview:label];
-    
-    [backdrop addSubview:overlay];
-    [window addSubview:backdrop];
-    
-    [UIView animateWithDuration:0.3 animations:^{
-        backdrop.alpha = 1;
-    }];
-}
-
-%new
-- (void)showOverlayQT:(NSString *)title message:(NSString *)message isError:(BOOL)isError original:(NSString *)original {
-    UIWindow *window = getKeyWindow();
-    if (!window) return;
-    
-    [[window viewWithTag:99999] removeFromSuperview];
-    
-    UIView *backdrop = [[UIView alloc] initWithFrame:window.bounds];
-    backdrop.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
-    backdrop.tag = 99999;
-    backdrop.alpha = 0;
-    
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissOverlayQT:)];
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissPopup)];
     [backdrop addGestureRecognizer:tap];
     
-    CGFloat height = isError ? 200 : 380;
-    UIView *overlay = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 340, height)];
-    overlay.center = backdrop.center;
-    overlay.backgroundColor = [UIColor systemBackgroundColor];
-    overlay.layer.cornerRadius = 20;
-    overlay.layer.shadowColor = [UIColor blackColor].CGColor;
-    overlay.layer.shadowOpacity = 0.3;
-    overlay.layer.shadowOffset = CGSizeMake(0, 4);
-    overlay.layer.shadowRadius = 10;
+    // Popup
+    UIView *popup = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 320, 240)];
+    popup.center = backdrop.center;
+    popup.backgroundColor = [UIColor systemBackgroundColor];
+    popup.layer.cornerRadius = 16;
+    popup.layer.shadowColor = [UIColor blackColor].CGColor;
+    popup.layer.shadowOpacity = 0.3;
+    popup.layer.shadowOffset = CGSizeMake(0, 4);
+    popup.layer.shadowRadius = 12;
     
-    CGFloat y = 20;
-    
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, y, 300, 30)];
+    // Title
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 20, 280, 30)];
     titleLabel.text = title;
-    titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
-    titleLabel.textColor = isError ? [UIColor systemRedColor] : [UIColor systemBlueColor];
-    [overlay addSubview:titleLabel];
-    y += 40;
+    titleLabel.font = [UIFont boldSystemFontOfSize:18];
+    titleLabel.textColor = [UIColor systemBlueColor];
+    [popup addSubview:titleLabel];
     
-    if (!isError && original) {
-        UILabel *origLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, y, 300, 20)];
-        origLabel.text = @"Original:";
-        origLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-        origLabel.textColor = [UIColor secondaryLabelColor];
-        [overlay addSubview:origLabel];
-        y += 25;
-        
-        UITextView *origText = [[UITextView alloc] initWithFrame:CGRectMake(20, y, 300, 60)];
-        origText.text = original;
-        origText.font = [UIFont systemFontOfSize:15];
-        origText.backgroundColor = [UIColor secondarySystemBackgroundColor];
-        origText.layer.cornerRadius = 10;
-        origText.editable = NO;
-        origText.scrollEnabled = YES;
-        origText.textContainerInset = UIEdgeInsetsMake(8, 8, 8, 8);
-        [overlay addSubview:origText];
-        y += 70;
-        
-        UILabel *arrow = [[UILabel alloc] initWithFrame:CGRectMake(0, y, 340, 20)];
-        arrow.text = @"↓";
-        arrow.textAlignment = NSTextAlignmentCenter;
-        arrow.font = [UIFont systemFontOfSize:20];
-        arrow.textColor = [UIColor systemBlueColor];
-        [overlay addSubview:arrow];
-        y += 25;
-        
-        UILabel *transLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, y, 300, 20)];
-        transLabel.text = @"Übersetzt:";
-        transLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-        transLabel.textColor = [UIColor secondaryLabelColor];
-        [overlay addSubview:transLabel];
-        y += 25;
-    }
+    // Message
+    UITextView *messageView = [[UITextView alloc] initWithFrame:CGRectMake(20, 60, 280, 100)];
+    messageView.text = message;
+    messageView.font = [UIFont systemFontOfSize:16];
+    messageView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    messageView.layer.cornerRadius = 10;
+    messageView.editable = NO;
+    messageView.scrollEnabled = YES;
+    messageView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
+    [popup addSubview:messageView];
     
-    UITextView *messageText = [[UITextView alloc] initWithFrame:CGRectMake(20, y, 300, 80)];
-    messageText.text = message;
-    messageText.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-    messageText.backgroundColor = isError ? [[UIColor systemRedColor] colorWithAlphaComponent:0.1] : [[UIColor systemGreenColor] colorWithAlphaComponent:0.1];
-    messageText.layer.cornerRadius = 10;
-    messageText.layer.borderWidth = 2;
-    messageText.layer.borderColor = isError ? [UIColor systemRedColor].CGColor : [UIColor systemGreenColor].CGColor;
-    messageText.editable = NO;
-    messageText.scrollEnabled = YES;
-    messageText.textContainerInset = UIEdgeInsetsMake(8, 8, 8, 8);
-    [overlay addSubview:messageText];
-    y += 90;
+    // Buttons
+    UIButton *copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    copyBtn.frame = CGRectMake(20, 180, 135, 40);
+    [copyBtn setTitle:@"📋 Kopieren" forState:UIControlStateNormal];
+    copyBtn.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+    copyBtn.backgroundColor = [UIColor systemBlueColor];
+    [copyBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    copyBtn.layer.cornerRadius = 10;
+    [copyBtn addTarget:self action:@selector(copyText:) forControlEvents:UIControlEventTouchUpInside];
+    objc_setAssociatedObject(copyBtn, "messageText", message, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [popup addSubview:copyBtn];
     
-    if (!isError) {
-        objc_setAssociatedObject(backdrop, "translatedText", message, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        
-        UIButton *copyBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        copyBtn.frame = CGRectMake(20, y, 145, 44);
-        [copyBtn setTitle:@"📋 Kopieren" forState:UIControlStateNormal];
-        copyBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-        copyBtn.backgroundColor = [UIColor systemBlueColor];
-        [copyBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        copyBtn.layer.cornerRadius = 12;
-        [copyBtn addTarget:self action:@selector(copyTextQT:) forControlEvents:UIControlEventTouchUpInside];
-        [overlay addSubview:copyBtn];
-        
-        UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        closeBtn.frame = CGRectMake(175, y, 145, 44);
-        [closeBtn setTitle:@"Schließen" forState:UIControlStateNormal];
-        closeBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-        closeBtn.backgroundColor = [UIColor secondarySystemBackgroundColor];
-        [closeBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
-        closeBtn.layer.cornerRadius = 12;
-        [closeBtn addTarget:self action:@selector(dismissOverlayQT:) forControlEvents:UIControlEventTouchUpInside];
-        [overlay addSubview:closeBtn];
-    } else {
-        UIButton *okBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        okBtn.frame = CGRectMake(70, y, 200, 44);
-        [okBtn setTitle:@"OK" forState:UIControlStateNormal];
-        okBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-        okBtn.backgroundColor = [UIColor systemRedColor];
-        [okBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        okBtn.layer.cornerRadius = 12;
-        [okBtn addTarget:self action:@selector(dismissOverlayQT:) forControlEvents:UIControlEventTouchUpInside];
-        [overlay addSubview:okBtn];
-    }
+    UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    closeBtn.frame = CGRectMake(165, 180, 135, 40);
+    [closeBtn setTitle:@"Schließen" forState:UIControlStateNormal];
+    closeBtn.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+    closeBtn.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    [closeBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
+    closeBtn.layer.cornerRadius = 10;
+    [closeBtn addTarget:self action:@selector(dismissPopup) forControlEvents:UIControlEventTouchUpInside];
+    [popup addSubview:closeBtn];
     
-    [backdrop addSubview:overlay];
+    [backdrop addSubview:popup];
     [window addSubview:backdrop];
     
-    overlay.transform = CGAffineTransformMakeScale(0.8, 0.8);
-    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:0 animations:^{
+    // Animation
+    popup.transform = CGAffineTransformMakeScale(0.8, 0.8);
+    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:0 animations:^{
         backdrop.alpha = 1;
-        overlay.transform = CGAffineTransformIdentity;
+        popup.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
 
-%new
-- (void)copyTextQT:(UIButton *)sender {
-    UIWindow *window = getKeyWindow();
-    UIView *backdrop = [window viewWithTag:99999];
-    NSString *text = objc_getAssociatedObject(backdrop, "translatedText");
-    
+- (void)copyText:(UIButton *)sender {
+    NSString *text = objc_getAssociatedObject(sender, "messageText");
     if (text) {
-        UIPasteboard.generalPasteboard.string = text;
+        [UIPasteboard generalPasteboard].string = text;
         [sender setTitle:@"✓ Kopiert!" forState:UIControlStateNormal];
         sender.enabled = NO;
         
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self dismissOverlayQT:nil];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self dismissPopup];
         });
     }
 }
 
-%new
-- (void)dismissOverlayQT:(id)sender {
+- (void)dismissPopup {
     UIWindow *window = getKeyWindow();
-    UIView *backdrop = [window viewWithTag:99999];
+    UIView *backdrop = [window viewWithTag:88888];
     [UIView animateWithDuration:0.3 animations:^{
         backdrop.alpha = 0;
         for (UIView *subview in backdrop.subviews) {
@@ -345,21 +229,60 @@ static UIWindow* getKeyWindow() {
     }];
 }
 
-- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (!tweakEnabled) {
-        return %orig;
-    }
+@end
+
+// UITextSelectionView Hook
+%hook UITextSelectionView
+
+- (void)didMoveToWindow {
+    %orig;
     
-    if (action == @selector(quickTranslate:)) {
-        if ([self conformsToProtocol:@protocol(UITextInput)]) {
-            id<UITextInput> textInput = (id<UITextInput>)self;
-            UITextRange *range = textInput.selectedTextRange;
-            return range && ![range isEmpty];
+    if (!isAppEnabled()) return;
+    
+    // Entferne alten Button
+    [[self viewWithTag:77777] removeFromSuperview];
+    
+    // Hole ausgewählten Text
+    UITextRange *selectedRange = nil;
+    NSString *selectedText = nil;
+    
+    if ([self respondsToSelector:@selector(rangeView)]) {
+        id rangeView = [self performSelector:@selector(rangeView)];
+        if ([rangeView respondsToSelector:@selector(textRange)]) {
+            selectedRange = [rangeView performSelector:@selector(textRange)];
         }
-        return NO;
     }
     
-    return %orig;
+    // Versuche Text zu bekommen
+    UIResponder *responder = self.nextResponder;
+    while (responder) {
+        if ([responder conformsToProtocol:@protocol(UITextInput)]) {
+            id<UITextInput> textInput = (id<UITextInput>)responder;
+            if (selectedRange) {
+                selectedText = [textInput textInRange:selectedRange];
+            } else {
+                UITextRange *range = textInput.selectedTextRange;
+                if (range) {
+                    selectedText = [textInput textInRange:range];
+                }
+            }
+            break;
+        }
+        responder = responder.nextResponder;
+    }
+    
+    if (!selectedText || selectedText.length == 0) return;
+    
+    // Erstelle Button
+    QTTranslateButton *button = [[QTTranslateButton alloc] initWithFrame:CGRectMake(0, 0, 120, 32)];
+    button.tag = 77777;
+    button.selectedText = selectedText;
+    
+    // Positioniere Button unter der Auswahl
+    CGRect bounds = self.bounds;
+    button.center = CGPointMake(bounds.size.width / 2, bounds.size.height + 20);
+    
+    [self addSubview:button];
 }
 
 %end
@@ -368,8 +291,8 @@ static UIWindow* getKeyWindow() {
 static void loadPrefs() {
     NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.hombergerkurde.quicktranslate.plist"];
     if (prefs) {
-        tweakEnabled = [prefs objectForKey:@"enabled"] ? [[prefs objectForKey:@"enabled"] boolValue] : YES;
-        targetLanguage = [prefs objectForKey:@"targetLanguage"] ?: @"de";
+        targetLanguage = prefs[@"targetLanguage"] ?: @"de";
+        enabledApps = [prefs[@"enabledApplications"] mutableCopy] ?: [NSMutableDictionary dictionary];
     }
 }
 
